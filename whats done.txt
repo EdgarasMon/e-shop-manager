@@ -1,0 +1,1 @@
+instaled: bcrypt, cors, mongoose, nodemon
