@@ -4,7 +4,6 @@ const { Schema } = mongoose;
 const items = mongoose.model(
     "items",
     new Schema({
-        // selectedFile: String,
         name: String,
         description: String,
         specification: String,
