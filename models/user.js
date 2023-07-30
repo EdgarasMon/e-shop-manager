@@ -11,6 +11,8 @@ const users = mongoose.model(
         password: String,
         dateOfBirth: Date,
         gender: String,
+        wishListItems: Array,
+        cartItems: Array
     })
 );
 

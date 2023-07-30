@@ -30,7 +30,6 @@ router.get("/token", (req, res) => {
 router.post("/addUser", async (req, res) => {
   try {
     const { name, surname, email, password, dateOfBirth, gender } = req.body;
-
     // check if already exist email
     const existEmail = await users.findOne({ email })
     if (existEmail) {
@@ -66,12 +65,13 @@ router.post("/login", /*authorization,*/ async (req, res) => {
       return
     }
     const userData = await users.findOne({ email });
+    const { _id, name, surname } = userData;
     const isValid = await validateUser(password, userData.password);
 
     if (isValid) {
-      console.log(isValid);
-      res.json({ message: "succesfully loged in", type: "success" });
-      // return
+      // authorization()
+      console.log('isValid: ', isValid);
+      res.json({ message: "succesfully loged in", type: "success", _id, name, surname });
     } else {
       res.json({ message: "cannot find user with that email or bad password", type: "error" });
     }
