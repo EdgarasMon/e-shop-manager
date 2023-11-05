@@ -7,7 +7,7 @@ const items = mongoose.model(
         name: String,
         description: String,
         specification: String,
-        price: String,
+        price: Number,
         type: String,
         brand: String,
         model: String,

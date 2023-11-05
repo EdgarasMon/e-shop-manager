@@ -9,9 +9,10 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
+const checkAuth = require("../routes/utils/checkAuth")
 
 
-router.get("/getItems", async (req, res) => {
+router.get("/getItems", checkAuth, async (req, res) => {
   try {
     const result = await items.find({});
     res.json({ data: result, type: "got items" });
@@ -20,13 +21,26 @@ router.get("/getItems", async (req, res) => {
   }
 });
 
-router.get("/getItem", async (req, res) => {
+router.get("/getItem", checkAuth, async (req, res) => {
   try {
     const { id } = req.query;
     const item = await items.findOne({ _id: new ObjectId(id) });
     res.send({ data: item });
   } catch (error) {
     res.json({ message: 'item not found', type: "warning" });
+  }
+});
+
+router.get("/getSpecificItems", checkAuth, async (req, res) => {
+  try {
+    const { userCartItemIds } = req.query;
+    const arr = userCartItemIds.split(",");
+    const result = await Promise.all(
+      arr.map(async id => await items.find({ _id: new ObjectId(id) }))
+    );
+    res.json({ data: result, type: "got items" });
+  } catch (error) {
+    res.json({ message: "items not found", type: "warning" });
   }
 });
 
@@ -63,9 +77,7 @@ router.get("/getImage", async (req, res) => {
   }
 });
 
-
-
-router.post("/addItem", upload.single('image'), async (req, res) => {
+router.post("/addItem", checkAuth, upload.single('image'), async (req, res) => {
   try {
     const file = req.file;
     const {
@@ -88,7 +100,7 @@ router.post("/addItem", upload.single('image'), async (req, res) => {
       model &&
       color
     ) {
-      const result = await items.inser({
+      const result = await items.insertMany({
         name,
         description,
         specification,
@@ -145,6 +157,101 @@ const uploadImage = async (itemId, file) => {
   }
 }
 
+/** Does two things saves item id to user cart, but if item already exists removes it */
+router.post("/saveToCart", checkAuth, async (req, res) => {
+  try {
+    const { itemId } = req.query;
+    const { userId } = req.body;
+
+    console.log(itemId, userId)
+
+    const result = await user.findOne({ _id: userId }, { cartItems: true, _id: false });
+    const { cartItems } = result;
+    let itemFound = false;
+
+    if (cartItems) {
+      cartItems.forEach(el => {
+        if (el.toString() === itemId) {
+          itemFound = true;
+          return;
+        }
+      });
+    }
+
+    if (itemFound) {
+      await user.findByIdAndUpdate({ _id: userId }, { $pull: { cartItems: itemId } });
+      res.json({ message: "Item deleted", type: "success" });
+
+    } else {
+      const resultSaved = await user.findByIdAndUpdate({ _id: userId }, { $push: { cartItems: itemId } });
+      if (resultSaved) {
+        res.json({ message: "Item saved", type: "success" });
+      }
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Item was not saved", type: "error" });
+  }
+});
+
+router.post("/saveToWhishList", checkAuth, async (req, res) => {
+  try {
+    const { itemId } = req.query;
+    const { userId } = req.body;
+
+    const result = await user.findOne({ _id: userId }, { wishListItems: true, _id: false });
+    const { wishListItems } = result;
+    let itemFound = false;
+
+    if (wishListItems) {
+      wishListItems.forEach(el => {
+        if (el.toString() === itemId) {
+          itemFound = true;
+          return;
+        }
+      });
+    }
+
+    if (itemFound) {
+      await user.findByIdAndUpdate({ _id: userId }, { $pull: { wishListItems: itemId } });
+      res.json({ message: "Item deleted", type: "success" });
+
+    } else {
+      const resultSaved = await user.findByIdAndUpdate({ _id: userId }, { $push: { wishListItems: itemId } });
+      if (resultSaved) {
+        res.json({ message: "Item saved", type: "success" });
+      }
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Item was not saved", type: "error" });
+  }
+});
+
+router.get("/getUserCartItems", checkAuth, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const result = await user.findOne({ _id: userId });
+    if (result) {
+      res.json({ message: "Items found", type: "success", items: result.cartItems });
+
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Item was not saved", type: "error" });
+  }
+});
+
+router.get("/getUserWishListItems", checkAuth, async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const result = await user.findOne({ _id: userId });
+    if (result) {
+      res.json({ message: "Whish list items found", type: "success", items: result.wishListItems });
+
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Whish list items was not saved", type: "error" });
+  }
+});
+
 /*
 router.post('/addImage', upload.single('image'), async (req, res) => {
   try {
@@ -179,98 +286,6 @@ router.post('/addImage', upload.single('image'), async (req, res) => {
   }
 });
 */
-
-router.post("/saveToCart", async (req, res) => {
-  try {
-    const { itemId } = req.query;
-    const { userId } = req.body;
-
-    const result = await user.findOne({ _id: userId }, { cartItems: true, _id: false });
-    const { cartItems } = result;
-    let itemFound = false;
-
-    if (cartItems) {
-      cartItems.forEach(el => {
-        if (el.toString() === itemId) {
-          itemFound = true;
-          return;
-        }
-      });
-    }
-
-    if (itemFound) {
-      await user.findByIdAndUpdate({ _id: userId }, { $pull: { cartItems: itemId } });
-      res.json({ message: "Item deleted", type: "success" });
-
-    } else {
-      const resultSaved = await user.findByIdAndUpdate({ _id: userId }, { $push: { cartItems: itemId } });
-      if (resultSaved) {
-        res.json({ message: "Item saved", type: "success" });
-      }
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Item was not saved", type: "error" });
-  }
-});
-
-router.post("/saveToWhishList", async (req, res) => {
-  try {
-    const { itemId } = req.query;
-    const { userId } = req.body;
-
-    const result = await user.findOne({ _id: userId }, { wishListItems: true, _id: false });
-    const { wishListItems } = result;
-    let itemFound = false;
-
-    if (wishListItems) {
-      wishListItems.forEach(el => {
-        if (el.toString() === itemId) {
-          itemFound = true;
-          return;
-        }
-      });
-    }
-
-    if (itemFound) {
-      await user.findByIdAndUpdate({ _id: userId }, { $pull: { wishListItems: itemId } });
-      res.json({ message: "Item deleted", type: "success" });
-
-    } else {
-      const resultSaved = await user.findByIdAndUpdate({ _id: userId }, { $push: { wishListItems: itemId } });
-      if (resultSaved) {
-        res.json({ message: "Item saved", type: "success" });
-      }
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Item was not saved", type: "error" });
-  }
-});
-
-router.get("/getUserCartItems", async (req, res) => {
-  try {
-    const { userId } = req.query;
-    const result = await user.findOne({ _id: userId });
-    if (result) {
-      res.json({ message: "Items found", type: "success", items: result.cartItems });
-
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Item was not saved", type: "error" });
-  }
-});
-
-router.get("/getUserWishListItems", async (req, res) => {
-  try {
-    const { userId } = req.query;
-    const result = await user.findOne({ _id: userId });
-    if (result) {
-      res.json({ message: "Whish list items found", type: "success", items: result.wishListItems });
-
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Whish list items was not saved", type: "error" });
-  }
-});
 
 
 module.exports = router;

@@ -1,1 +1,1 @@
-instaled: bcrypt, cors, mongoose, nodemon,
+whats done: added token sign when login in, token verification, created function AuthCheck on every route

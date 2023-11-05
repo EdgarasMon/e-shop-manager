@@ -2,10 +2,11 @@ const express = require("express");
 const router = express.Router();
 const cryptPassword = require("./utils/cryptPassword");
 const validateUser = require("./utils/validateUser");
-const users = require('../models/user');
-const authorization = require("../routes/utils/authorization");
+const users = require("../models/user");
+const checkAuth = require("./utils/checkAuth");
 const jwt = require("jsonwebtoken");
 const { ObjectId } = require("mongodb");
+const config = require("../config");
 
 router.get("/", async (req, res) => {
   try {
@@ -17,24 +18,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/token", (req, res) => {
-  const payload = {
-    name: "user",
-    userId: 1,
-  }
-
-  const token = jwt.sign(payload, 'secret key');
-  res.send(token);
-});
-
 router.post("/addUser", async (req, res) => {
   try {
     const { name, surname, email, password, dateOfBirth, gender } = req.body;
     // check if already exist email
-    const existEmail = await users.findOne({ email })
+    const existEmail = await users.findOne({ email });
     if (existEmail) {
-      res.json({ message: "that e-mail already exist", type: "warning" });
-      return
+      res.json({ message: "that e-mail already exist", type: "error" });
+      return;
     }
 
     if (name && surname && email && password && dateOfBirth && gender) {
@@ -48,7 +39,7 @@ router.post("/addUser", async (req, res) => {
       });
       res.json({ message: "succesfully saved a user", type: "success" });
     } else {
-      res.json({ message: "missing some user data", type: "warning" });
+      res.json({ message: "missing some user data", type: "error" });
     }
   } catch (error) {
     console.error(error);
@@ -56,24 +47,43 @@ router.post("/addUser", async (req, res) => {
   }
 });
 
-router.post("/login", /*authorization,*/ async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
       res.json({ message: "please provide email and password", type: "error" });
-      return
+      return;
     }
     const userData = await users.findOne({ email });
+
+    if (!userData) {
+      res.json({
+        message: "cannot find user with that email",
+        type: "error",
+      });
+      return;
+    }
     const { _id, name, surname } = userData;
     const isValid = await validateUser(password, userData.password);
+    const token = jwt.sign({ email, password }, config.jwtSecret, {
+      expiresIn: "1h",
+    });
 
     if (isValid) {
-      // authorization()
-      console.log('isValid: ', isValid);
-      res.json({ message: "succesfully loged in", type: "success", _id, name, surname });
+      res.json({
+        message: "succesfully loged in",
+        type: "success",
+        _id,
+        name,
+        surname,
+        token,
+      });
     } else {
-      res.json({ message: "cannot find user with that email or bad password", type: "error" });
+      res.json({
+        message: "bad password",
+        type: "error",
+      });
     }
   } catch (error) {
     console.error(error);
@@ -81,14 +91,16 @@ router.post("/login", /*authorization,*/ async (req, res) => {
   }
 });
 
-
-router.put("/profile", /*authorization,*/ async (req, res) => {
+router.put("/profile", checkAuth, async (req, res) => {
   try {
     const { userId, aboutMe } = req.body;
-    console.log('/////////////', userId, aboutMe);
+    console.log("/////////////", userId, aboutMe);
 
     // const result = await users.updateOne({ _id:  }, { $set: { aboutMe } });
-    const result = await users.updateOne({ _id: new ObjectId(userId) }, { $set: { aboutMe: 'aboutMe' } });
+    const result = await users.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { aboutMe: "aboutMe" } }
+    );
     // TODO fix this update
     console.log(result);
 
@@ -105,10 +117,10 @@ router.put("/profile", /*authorization,*/ async (req, res) => {
   }
 });
 
-router.post("/addAvatarPhoto", /*authorization,*/ async (req, res) => {
+router.post("/addAvatarPhoto", checkAuth, async (req, res) => {
   try {
     //   const { userId, aboutMe } = req.body;
-    console.log('/////////////***********************');
+    console.log("/////////////***********************");
 
     //   // const result = await users.updateOne({ _id:  }, { $set: { aboutMe } });
     //   const result = await users.updateOne({ _id: new ObjectId(userId) }, { $set: { aboutMe: 'aboutMe' } });
