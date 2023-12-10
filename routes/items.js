@@ -1,16 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const items = require('../models/items');
-const user = require('../models/user');
-const images = require('../models/images');
+const items = require("../models/items");
+const user = require("../models/user");
+const images = require("../models/images");
 const { ObjectId } = require("mongodb");
-const mongoose = require('mongoose');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' });
-const checkAuth = require("../routes/utils/checkAuth")
-
+const mongoose = require("mongoose");
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
+const upload = multer({ dest: "uploads/" });
+const checkAuth = require("../routes/utils/checkAuth");
+const checkRole = require("./utils/checkRole");
 
 router.get("/getItems", checkAuth, async (req, res) => {
   try {
@@ -27,7 +27,7 @@ router.get("/getItem", checkAuth, async (req, res) => {
     const item = await items.findOne({ _id: new ObjectId(id) });
     res.send({ data: item });
   } catch (error) {
-    res.json({ message: 'item not found', type: "warning" });
+    res.json({ message: "item not found", type: "warning" });
   }
 });
 
@@ -36,7 +36,7 @@ router.get("/getSpecificItems", checkAuth, async (req, res) => {
     const { userCartItemIds } = req.query;
     const arr = userCartItemIds.split(",");
     const result = await Promise.all(
-      arr.map(async id => await items.find({ _id: new ObjectId(id) }))
+      arr.map(async (id) => await items.find({ _id: new ObjectId(id) }))
     );
     res.json({ data: result, type: "got items" });
   } catch (error) {
@@ -47,7 +47,7 @@ router.get("/getSpecificItems", checkAuth, async (req, res) => {
 router.get("/getImages", async (req, res) => {
   try {
     const result = await images.find({});
-    console.log('result', result)
+    console.log("result", result);
 
     if (result) {
       const imageData = result.map((image) => image.data);
@@ -67,7 +67,7 @@ router.get("/getImage", async (req, res) => {
     const result = await images.findOne({ itemId: id });
 
     if (result) {
-      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader("Content-Type", "image/jpeg");
       res.send(result.data);
     } else {
       res.status(404).json({ message: "Image not found", type: "warning" });
@@ -77,30 +77,15 @@ router.get("/getImage", async (req, res) => {
   }
 });
 
-router.post("/addItem", checkAuth, upload.single('image'), async (req, res) => {
-  try {
-    const file = req.file;
-    const {
-      name,
-      description,
-      specification,
-      price,
-      type,
-      brand,
-      model,
-      color } = req.body;
-
-    if (
-      name &&
-      description &&
-      specification &&
-      price &&
-      type &&
-      brand &&
-      model &&
-      color
-    ) {
-      const result = await items.insertMany({
+router.post(
+  "/addItem",
+  checkAuth,
+  checkRole,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      const file = req.file;
+      const {
         name,
         description,
         specification,
@@ -108,21 +93,43 @@ router.post("/addItem", checkAuth, upload.single('image'), async (req, res) => {
         type,
         brand,
         model,
+        color,
+      } = req.body;
+
+      if (
+        name &&
+        description &&
+        specification &&
+        price &&
+        type &&
+        brand &&
+        model &&
         color
-      });
+      ) {
+        const result = await items.insertMany({
+          name,
+          description,
+          specification,
+          price,
+          type,
+          brand,
+          model,
+          color,
+        });
 
-      const itemId = await result[0]._id.toString();
-      await uploadImage(itemId, file);
+        const itemId = await result[0]._id.toString();
+        await uploadImage(itemId, file);
 
-      res.json({ message: "succesfully saved a item", type: "success" });
-    } else {
-      res.json({ message: "missing some item data", type: "warning" });
+        res.json({ message: "succesfully saved a item", type: "success" });
+      } else {
+        res.json({ message: "missing some item data", type: "warning" });
+      }
+    } catch (error) {
+      console.error(error);
+      res.json({ message: error, type: "error" });
     }
-  } catch (error) {
-    console.error(error);
-    res.json({ message: error, type: "error" });
   }
-});
+);
 
 const uploadImage = async (itemId, file) => {
   try {
@@ -132,9 +139,9 @@ const uploadImage = async (itemId, file) => {
       itemId: String,
     });
 
-    const ImageModel = mongoose.model('Image', ImageSchema);
+    const ImageModel = mongoose.model("Image", ImageSchema);
 
-    const filePath = path.join(__dirname, '..', 'uploads', file.filename);
+    const filePath = path.join(__dirname, "..", "uploads", file.filename);
     const data = fs.readFileSync(filePath);
 
     const image = new ImageModel({
@@ -146,16 +153,15 @@ const uploadImage = async (itemId, file) => {
     await image.save();
     fs.unlink(file.path, (error) => {
       if (error) {
-        console.error('Error deleting file:', error);
+        console.error("Error deleting file:", error);
       }
     });
-
   } catch (error) {
     console.error(error);
   } finally {
     mongoose.connection.close();
   }
-}
+};
 
 /** Does two things saves item id to user cart, but if item already exists removes it */
 router.post("/saveToCart", checkAuth, async (req, res) => {
@@ -163,14 +169,17 @@ router.post("/saveToCart", checkAuth, async (req, res) => {
     const { itemId } = req.query;
     const { userId } = req.body;
 
-    console.log(itemId, userId)
+    console.log(itemId, userId);
 
-    const result = await user.findOne({ _id: userId }, { cartItems: true, _id: false });
+    const result = await user.findOne(
+      { _id: userId },
+      { cartItems: true, _id: false }
+    );
     const { cartItems } = result;
     let itemFound = false;
 
     if (cartItems) {
-      cartItems.forEach(el => {
+      cartItems.forEach((el) => {
         if (el.toString() === itemId) {
           itemFound = true;
           return;
@@ -179,11 +188,16 @@ router.post("/saveToCart", checkAuth, async (req, res) => {
     }
 
     if (itemFound) {
-      await user.findByIdAndUpdate({ _id: userId }, { $pull: { cartItems: itemId } });
+      await user.findByIdAndUpdate(
+        { _id: userId },
+        { $pull: { cartItems: itemId } }
+      );
       res.json({ message: "Item deleted", type: "success" });
-
     } else {
-      const resultSaved = await user.findByIdAndUpdate({ _id: userId }, { $push: { cartItems: itemId } });
+      const resultSaved = await user.findByIdAndUpdate(
+        { _id: userId },
+        { $push: { cartItems: itemId } }
+      );
       if (resultSaved) {
         res.json({ message: "Item saved", type: "success" });
       }
@@ -198,12 +212,15 @@ router.post("/saveToWhishList", checkAuth, async (req, res) => {
     const { itemId } = req.query;
     const { userId } = req.body;
 
-    const result = await user.findOne({ _id: userId }, { wishListItems: true, _id: false });
+    const result = await user.findOne(
+      { _id: userId },
+      { wishListItems: true, _id: false }
+    );
     const { wishListItems } = result;
     let itemFound = false;
 
     if (wishListItems) {
-      wishListItems.forEach(el => {
+      wishListItems.forEach((el) => {
         if (el.toString() === itemId) {
           itemFound = true;
           return;
@@ -212,11 +229,16 @@ router.post("/saveToWhishList", checkAuth, async (req, res) => {
     }
 
     if (itemFound) {
-      await user.findByIdAndUpdate({ _id: userId }, { $pull: { wishListItems: itemId } });
+      await user.findByIdAndUpdate(
+        { _id: userId },
+        { $pull: { wishListItems: itemId } }
+      );
       res.json({ message: "Item deleted", type: "success" });
-
     } else {
-      const resultSaved = await user.findByIdAndUpdate({ _id: userId }, { $push: { wishListItems: itemId } });
+      const resultSaved = await user.findByIdAndUpdate(
+        { _id: userId },
+        { $push: { wishListItems: itemId } }
+      );
       if (resultSaved) {
         res.json({ message: "Item saved", type: "success" });
       }
@@ -231,8 +253,11 @@ router.get("/getUserCartItems", checkAuth, async (req, res) => {
     const { userId } = req.query;
     const result = await user.findOne({ _id: userId });
     if (result) {
-      res.json({ message: "Items found", type: "success", items: result.cartItems });
-
+      res.json({
+        message: "Items found",
+        type: "success",
+        items: result.cartItems,
+      });
     }
   } catch (error) {
     res.status(500).json({ message: "Item was not saved", type: "error" });
@@ -244,11 +269,16 @@ router.get("/getUserWishListItems", checkAuth, async (req, res) => {
     const { userId } = req.query;
     const result = await user.findOne({ _id: userId });
     if (result) {
-      res.json({ message: "Whish list items found", type: "success", items: result.wishListItems });
-
+      res.json({
+        message: "Whish list items found",
+        type: "success",
+        items: result.wishListItems,
+      });
     }
   } catch (error) {
-    res.status(500).json({ message: "Whish list items was not saved", type: "error" });
+    res
+      .status(500)
+      .json({ message: "Whish list items was not saved", type: "error" });
   }
 });
 
@@ -286,6 +316,5 @@ router.post('/addImage', upload.single('image'), async (req, res) => {
   }
 });
 */
-
 
 module.exports = router;

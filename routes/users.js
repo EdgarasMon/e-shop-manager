@@ -3,10 +3,11 @@ const router = express.Router();
 const cryptPassword = require("./utils/cryptPassword");
 const validateUser = require("./utils/validateUser");
 const users = require("../models/user");
-const checkAuth = require("./utils/checkAuth");
 const jwt = require("jsonwebtoken");
 const { ObjectId } = require("mongodb");
 const config = require("../config");
+const checkAuth = require("./utils/checkAuth");
+const checkRole = require("./utils/checkRole");
 
 router.get("/", async (req, res) => {
   try {
@@ -36,6 +37,7 @@ router.post("/addUser", async (req, res) => {
         password: await cryptPassword(password),
         dateOfBirth,
         gender,
+        role: "user",
       });
       res.json({ message: "succesfully saved a user", type: "success" });
     } else {
@@ -64,9 +66,9 @@ router.post("/login", async (req, res) => {
       });
       return;
     }
-    const { _id, name, surname } = userData;
+    const { _id, name, surname, role } = userData;
     const isValid = await validateUser(password, userData.password);
-    const token = jwt.sign({ email, password }, config.jwtSecret, {
+    const token = jwt.sign({ email, password, role }, config.jwtSecret, {
       expiresIn: "1h",
     });
 
@@ -78,6 +80,7 @@ router.post("/login", async (req, res) => {
         name,
         surname,
         token,
+        role,
       });
     } else {
       res.json({
